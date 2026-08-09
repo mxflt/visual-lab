@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Visual Lab: interactive browser experiments with color, particles, reaction diffusion, WebGPU, and generative audio.">
+    <title>Visual Lab</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #070707;
+            --ink: #f7f2ea;
+            --muted: #a8a29a;
+            --line: rgba(247, 242, 234, 0.16);
+            --panel: rgba(20, 20, 18, 0.74);
+            --panel-strong: rgba(31, 31, 28, 0.88);
+            --cyan: #4dd6ff;
+            --green: #a6ff7a;
+            --rose: #ff6b9d;
+            --amber: #ffd166;
+            --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            min-height: 100%;
+            background: var(--bg);
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+            background:
+                radial-gradient(circle at 16% 8%, rgba(77, 214, 255, 0.16), transparent 28rem),
+                radial-gradient(circle at 92% 18%, rgba(255, 107, 157, 0.13), transparent 26rem),
+                linear-gradient(145deg, #070707 0%, #10100e 48%, #070707 100%);
+            color: var(--ink);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            letter-spacing: 0;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .stage {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            display: block;
+            width: 100%;
+            height: 100%;
+            opacity: 0.82;
+            pointer-events: none;
+        }
+
+        .noise {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            opacity: 0.18;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), transparent 80%);
+        }
+
+        .page {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            padding: 28px;
+        }
+
+        .shell {
+            width: min(1180px, 100%);
+            margin: 0 auto;
+            min-width: 0;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            min-height: 44px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 760;
+        }
+
+        .mark {
+            display: grid;
+            width: 34px;
+            height: 34px;
+            place-items: center;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04));
+            box-shadow: inset 0 0 24px rgba(77, 214, 255, 0.16);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+        }
+
+        .github {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--muted);
+            font-size: 14px;
+            transition: transform 180ms ease, border-color 180ms ease, color 180ms ease, background 180ms ease;
+        }
+
+        .github:hover {
+            transform: translateY(-1px);
+            border-color: rgba(247, 242, 234, 0.32);
+            background: rgba(255, 255, 255, 0.09);
+            color: var(--ink);
+        }
+
+        main {
+            display: grid;
+            gap: 42px;
+            padding: 80px 0 40px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.02fr) minmax(320px, 0.98fr);
+            gap: 32px;
+            align-items: end;
+            min-height: min(640px, calc(100vh - 152px));
+        }
+
+        .hero-copy {
+            min-width: 0;
+            padding: 0 0 34px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            margin: 0 0 18px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 20px rgba(166, 255, 122, 0.75);
+        }
+
+        h1 {
+            max-width: 760px;
+            margin: 0;
+            font-size: clamp(54px, 9vw, 124px);
+            line-height: 0.9;
+            font-weight: 840;
+            letter-spacing: 0;
+        }
+
+        h1 span {
+            display: block;
+        }
+
+        .intro {
+            width: 100%;
+            max-width: 640px;
+            margin: 24px 0 0;
+            color: #d4cec5;
+            font-size: clamp(18px, 2.2vw, 24px);
+            line-height: 1.45;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 32px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 46px;
+            padding: 0 18px;
+            border: 1px solid rgba(247, 242, 234, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--ink);
+            font-weight: 740;
+            transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+        }
+
+        .button.primary {
+            border-color: rgba(77, 214, 255, 0.52);
+            background: linear-gradient(135deg, rgba(77, 214, 255, 0.24), rgba(166, 255, 122, 0.16));
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            border-color: rgba(247, 242, 234, 0.38);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .instrument {
+            position: relative;
+            min-width: 0;
+            min-height: 430px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+                var(--panel);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+        }
+
+        .instrument canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .instrument-meta {
+            position: absolute;
+            inset: auto 18px 18px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(247, 242, 234, 0.14);
+            color: var(--muted);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--rose);
+            box-shadow: 0 0 14px rgba(255, 107, 157, 0.8);
+        }
+
+        .labs {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .lab {
+            min-height: 244px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 18px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel-strong);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+            transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+        }
+
+        .lab:hover {
+            transform: translateY(-4px);
+            border-color: rgba(247, 242, 234, 0.34);
+            background: rgba(41, 41, 37, 0.9);
+        }
+
+        .preview {
+            position: relative;
+            height: 86px;
+            overflow: hidden;
+            border-radius: 6px;
+            background: #0b0b0b;
+        }
+
+        .preview::before,
+        .preview::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+        }
+
+        .preview.reaction::before {
+            background:
+                repeating-radial-gradient(circle at 28% 50%, transparent 0 9px, rgba(77, 214, 255, 0.72) 10px 12px, transparent 13px 20px),
+                repeating-radial-gradient(circle at 70% 46%, transparent 0 7px, rgba(166, 255, 122, 0.58) 8px 10px, transparent 11px 18px);
+            filter: blur(0.5px);
+        }
+
+        .preview.colors::before {
+            background:
+                radial-gradient(circle at 22% 34%, #ff6b9d 0 12px, transparent 13px),
+                radial-gradient(circle at 49% 58%, #4dd6ff 0 15px, transparent 16px),
+                radial-gradient(circle at 74% 34%, #a6ff7a 0 11px, transparent 12px),
+                radial-gradient(circle at 66% 74%, #ffd166 0 13px, transparent 14px);
+        }
+
+        .preview.boids::before {
+            background-image:
+                linear-gradient(32deg, transparent 0 46%, rgba(77, 214, 255, 0.9) 47% 50%, transparent 51%),
+                linear-gradient(142deg, transparent 0 46%, rgba(255, 209, 102, 0.9) 47% 50%, transparent 51%);
+            background-size: 26px 18px;
+            background-position: 0 0, 11px 6px;
+        }
+
+        .preview.dub::before {
+            background:
+                linear-gradient(90deg, transparent 0 9%, rgba(255, 255, 255, 0.9) 10% 11%, transparent 12% 18%),
+                linear-gradient(90deg, transparent 0 5%, rgba(77, 214, 255, 0.8) 6% 7%, transparent 8% 20%),
+                linear-gradient(0deg, rgba(255, 255, 255, 0.08), transparent);
+            background-size: 34px 100%, 55px 100%, 100% 100%;
+        }
+
+        .preview::after {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45);
+        }
+
+        .lab h2 {
+            margin: 0;
+            font-size: 20px;
+            line-height: 1.12;
+            font-weight: 780;
+        }
+
+        .lab p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .tag {
+            color: #cfc8bd;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 16px 0 0;
+            color: #8f887d;
+            font-size: 13px;
+        }
+
+        @media (max-width: 980px) {
+            .page {
+                padding: 22px;
+            }
+
+            main {
+                padding-top: 54px;
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+                min-height: auto;
+            }
+
+            .hero-copy {
+                padding-bottom: 0;
+            }
+
+            .instrument {
+                min-height: 320px;
+            }
+
+            .labs {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 620px) {
+            body {
+                width: 100%;
+            }
+
+            .page {
+                padding: 18px;
+                overflow: hidden;
+            }
+
+            header {
+                align-items: flex-start;
+            }
+
+            .github {
+                min-height: 34px;
+                padding: 0 10px;
+                font-size: 13px;
+            }
+
+            main {
+                gap: 28px;
+                padding-top: 46px;
+            }
+
+            h1 {
+                font-size: clamp(50px, 18vw, 82px);
+                max-width: 340px;
+            }
+
+            .intro {
+                width: 340px;
+                max-width: 100%;
+                font-size: 17px;
+                overflow-wrap: break-word;
+            }
+
+            .actions {
+                display: grid;
+                grid-template-columns: 1fr;
+                width: 340px;
+                max-width: 100%;
+            }
+
+            .instrument {
+                width: 340px;
+                max-width: 100%;
+                min-height: 260px;
+            }
+
+            .instrument-meta {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .labs {
+                grid-template-columns: 1fr;
+                width: 340px;
+                max-width: 100%;
+            }
+
+            footer {
+                flex-direction: column;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <canvas class="stage" id="stage" aria-hidden="true"></canvas>
+    <div class="noise" aria-hidden="true"></div>
+
+    <div class="page">
+        <div class="shell">
+            <header>
+                <a class="brand" href="./index.html" aria-label="Visual Lab home">
+                    <span class="mark">VL</span>
+                    <span>Visual Lab</span>
+                </a>
+                <a class="github" href="https://github.com/mxflt/visual-lab">GitHub</a>
+            </header>
+
+            <main>
+                <section class="hero" aria-labelledby="title">
+                    <div class="hero-copy">
+                        <p class="eyebrow">Browser experiments</p>
+                        <h1 id="title"><span>Visual</span><span>Lab</span></h1>
+                        <p class="intro">A small collection of realtime sketches for color space, particle behavior, chemical patterns, and audio-reactive systems.</p>
+                        <div class="actions">
+                            <a class="button primary" href="./reaction_diffusion.html">Open Reaction-Diffusion</a>
+                            <a class="button" href="#experiments">Browse Experiments</a>
+                        </div>
+                    </div>
+
+                    <div class="instrument" aria-label="Animated Visual Lab preview">
+                        <canvas id="instrument"></canvas>
+                        <div class="instrument-meta">
+                            <span class="status">Live preview</span>
+                            <span>WebGL / WebGPU / WebAudio</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="labs" id="experiments" aria-label="Experiments">
+                    <a class="lab" href="./reaction_diffusion.html">
+                        <span class="preview reaction" aria-hidden="true"></span>
+                        <div>
+                            <h2>Reaction-Diffusion</h2>
+                            <p>Gray-Scott pattern growth with brush input, feed and kill controls.</p>
+                        </div>
+                        <span class="tag">WebGL2</span>
+                    </a>
+
+                    <a class="lab" href="./Farbvergleich01.html">
+                        <span class="preview colors" aria-hidden="true"></span>
+                        <div>
+                            <h2>Smart Color Clusters</h2>
+                            <p>CSS color names arranged by perceptual distance and HSL structure.</p>
+                        </div>
+                        <span class="tag">Three.js</span>
+                    </a>
+
+                    <a class="lab" href="./boids_webgpu.html">
+                        <span class="preview boids" aria-hidden="true"></span>
+                        <div>
+                            <h2>WebGPU Boids</h2>
+                            <p>Flocking particles driven by separation, alignment, and cohesion.</p>
+                        </div>
+                        <span class="tag">WebGPU</span>
+                    </a>
+
+                    <a class="lab" href="./dub_techno.html">
+                        <span class="preview dub" aria-hidden="true"></span>
+                        <div>
+                            <h2>Dub Techno Generator</h2>
+                            <p>Generative chords, delay textures, and a monochrome GPU visualizer.</p>
+                        </div>
+                        <span class="tag">WebAudio</span>
+                    </a>
+                </section>
+            </main>
+
+            <footer>
+                <span>mxflt / visual-lab</span>
+                <span>Realtime sketches for modern browsers.</span>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        function fitCanvas(canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const scale = Math.min(window.devicePixelRatio || 1, 2);
+            const width = Math.max(1, Math.floor(rect.width * scale));
+            const height = Math.max(1, Math.floor(rect.height * scale));
+
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+
+            return { width, height, scale };
+        }
+
+        function drawBackground() {
+            const canvas = document.getElementById("stage");
+            const ctx = canvas.getContext("2d");
+            let points = [];
+
+            function reset() {
+                const { width, height } = fitCanvas(canvas);
+                const count = Math.max(48, Math.floor((width * height) / 28000));
+                points = Array.from({ length: count }, (_, index) => ({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    vx: (Math.random() - 0.5) * 0.32,
+                    vy: (Math.random() - 0.5) * 0.32,
+                    hue: index % 3
+                }));
+            }
+
+            function frame() {
+                const { width, height } = fitCanvas(canvas);
+                ctx.clearRect(0, 0, width, height);
+
+                for (const point of points) {
+                    if (!reducedMotion) {
+                        point.x += point.vx;
+                        point.y += point.vy;
+                    }
+
+                    if (point.x < 0 || point.x > width) point.vx *= -1;
+                    if (point.y < 0 || point.y > height) point.vy *= -1;
+
+                    const color = point.hue === 0 ? "77, 214, 255" : point.hue === 1 ? "166, 255, 122" : "255, 107, 157";
+                    ctx.fillStyle = `rgba(${color}, 0.55)`;
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 1.4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.lineWidth = 1;
+                for (let i = 0; i < points.length; i += 1) {
+                    for (let j = i + 1; j < points.length; j += 1) {
+                        const a = points[i];
+                        const b = points[j];
+                        const dx = a.x - b.x;
+                        const dy = a.y - b.y;
+                        const distance = Math.hypot(dx, dy);
+
+                        if (distance < 148) {
+                            ctx.strokeStyle = `rgba(247, 242, 234, ${0.09 * (1 - distance / 148)})`;
+                            ctx.beginPath();
+                            ctx.moveTo(a.x, a.y);
+                            ctx.lineTo(b.x, b.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                if (!reducedMotion) requestAnimationFrame(frame);
+            }
+
+            reset();
+            window.addEventListener("resize", reset);
+            frame();
+        }
+
+        function drawInstrument() {
+            const canvas = document.getElementById("instrument");
+            const ctx = canvas.getContext("2d");
+            let time = 0;
+
+            function frame() {
+                const { width, height } = fitCanvas(canvas);
+                ctx.clearRect(0, 0, width, height);
+
+                const gradient = ctx.createLinearGradient(0, 0, width, height);
+                gradient.addColorStop(0, "rgba(77, 214, 255, 0.16)");
+                gradient.addColorStop(0.52, "rgba(255, 107, 157, 0.12)");
+                gradient.addColorStop(1, "rgba(166, 255, 122, 0.14)");
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+
+                const columns = 30;
+                const rows = 18;
+                const cellW = width / columns;
+                const cellH = height / rows;
+
+                for (let y = 0; y < rows; y += 1) {
+                    for (let x = 0; x < columns; x += 1) {
+                        const wave = Math.sin(x * 0.72 + time) + Math.cos(y * 0.86 - time * 0.72);
+                        const pulse = (wave + 2) / 4;
+                        const hue = x % 3 === 0 ? "77, 214, 255" : x % 3 === 1 ? "166, 255, 122" : "255, 209, 102";
+                        ctx.fillStyle = `rgba(${hue}, ${0.05 + pulse * 0.26})`;
+                        ctx.fillRect(x * cellW + 1, y * cellH + 1, Math.max(1, cellW - 2), Math.max(1, cellH - 2));
+                    }
+                }
+
+                ctx.strokeStyle = "rgba(247, 242, 234, 0.48)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let x = 0; x <= width; x += 6) {
+                    const y = height * 0.5 + Math.sin(x * 0.018 + time * 1.8) * height * 0.15 + Math.sin(x * 0.052 - time) * height * 0.04;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                time += reducedMotion ? 0 : 0.018;
+                if (!reducedMotion) requestAnimationFrame(frame);
+            }
+
+            frame();
+        }
+
+        drawBackground();
+        drawInstrument();
+    </script>
+</body>
+
+</html>
