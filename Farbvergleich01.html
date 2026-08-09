@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Smart Color Clusters 10.0 - Final</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --panel-bg: rgba(20, 20, 20, 0.85);
+            --accent: #3b82f6;
+            --text-main: #ffffff;
+            --text-muted: #888888;
+        }
+        body { margin: 0; overflow: hidden; background-color: var(--bg-color); font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: var(--text-main); user-select: none; -webkit-user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; touch-action: none; }
+        
+        /* UI Styles */
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; background: var(--panel-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 20px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); width: 280px; }
+        @media (max-width: 600px) { #ui { top: auto; bottom: 30px; left: 50%; transform: translateX(-50%); width: 85%; max-width: 400px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .mobile-full { grid-column: span 2; } h1 { display: none; } }
+        
+        h1 { font-size: 11px; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); font-weight: 800; }
+        button { display: flex; align-items: center; width: 100%; margin-bottom: 8px; padding: 14px 16px; border: none; background: rgba(255,255,255,0.04); color: #ccc; cursor: pointer; border-radius: 12px; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        button.active { background: var(--accent); color: white; }
+        button span.icon { margin-right: 12px; font-size: 18px; }
+        
+        .custom-control { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .color-row { display: flex; gap: 12px; align-items: center; margin-bottom: 16px;}
+        input[type="color"] { -webkit-appearance: none; border: none; width: 50px; height: 50px; border-radius: 12px; padding: 0; background: none; border: 1px solid rgba(255,255,255,0.2); }
+        
+        .slider-group { margin-top: 15px; opacity: 0.3; pointer-events: none; transition: opacity 0.3s; }
+        .slider-group.active { opacity: 1; pointer-events: all; }
+        .slider-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-weight: 600;}
+        input[type="range"] { -webkit-appearance: none; width: 100%; background: transparent; margin: 0 0 16px 0; }
+        input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%; background: white; margin-top: -6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+
+        #tooltip { position: absolute; pointer-events: none; padding: 12px 16px; background: rgba(10, 10, 10, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); color: white; border-radius: 12px; opacity: 0; transition: opacity 0.15s; transform: translate(-50%, -130%); z-index: 20; font-size: 13px; }
+        #tooltip.visible { opacity: 1; }
+        .color-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(255,255,255,0.3); vertical-align: middle;}
+
+        /* Console */
+        #console-overlay { position: fixed; top: 0; right: 0; width: 300px; max-width: 50vw; height: 200px; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); font-family: monospace; font-size: 11px; color: #00ff9d; z-index: 9999; border-bottom-left-radius: 16px; display: flex; flex-direction: column; border-left: 1px solid #333; border-bottom: 1px solid #333; }
+        #console-header { padding: 8px 12px; background: rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+        #console-content { flex: 1; overflow-y: auto; padding: 10px; word-break: break-all; }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .copy-btn { width: auto; padding: 4px 10px; font-size: 10px; background: #3b82f6; color: white; margin: 0;}
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script>
+        window.logBuffer = [];
+        function logToOverlay(msg, type = 'log') {
+            var c = document.getElementById('console-content');
+            if(c) {
+                var d = document.createElement('div');
+                d.className = 'log-entry';
+                d.style.color = type === 'error' ? '#ff4444' : '#00ff9d';
+                d.innerText = '> ' + msg;
+                c.appendChild(d);
+                c.scrollTop = c.scrollHeight;
+            }
+        }
+        window.onerror = function(msg, url, line) { logToOverlay("CRIT: " + msg + " (" + line + ")", 'error'); return false; };
+    </script>
+</head>
+<body>
+
+    <div id="console-overlay">
+        <div id="console-header">
+            <span>LOG</span> <button class="copy-btn" id="btn-copy-log">Copy</button>
+        </div>
+        <div id="console-content"></div>
+    </div>
+
+    <div id="ui">
+        <h1>Ansicht</h1>
+        <button id="btn-family" class="active"><span class="icon">✨</span>Familien</button>
+        <button id="btn-sim"><span class="icon">🌀</span>Ähnlichkeit</button>
+        <button id="btn-hsl"><span class="icon">📊</span>HSL Zylinder</button>
+        
+        <div class="custom-control mobile-full">
+            <h1 style="margin-bottom:10px;">Smart Match</h1>
+            <div class="color-row">
+                <input type="color" id="color-picker" value="#ff4081">
+                <button id="btn-custom" style="margin:0; justify-content:center; height: 50px;">🎯 Analysieren</button>
+            </div>
+            <div id="slider-group" class="slider-group">
+                <div class="slider-header"><span>Fokus (Anzahl)</span><span id="tol-val" class="slider-val">25</span></div>
+                <input type="range" id="tolerance-slider" min="5" max="148" value="25" step="1">
+                <div class="slider-header"><span>Sättigung Wichtung</span><span id="sat-val" class="slider-val">1.0x</span></div>
+                <input type="range" id="saturation-slider" min="0" max="4" value="1" step="0.1">
+            </div>
+        </div>
+    </div>
+
+    <div id="tooltip"></div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        // Jetzt nutzen wir die Namen aus der Import Map
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Logger Setup
+        const originalLog = console.log;
+        console.log = (...args) => {
+            originalLog(...args);
+            logToOverlay(args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+        };
+        document.getElementById('btn-copy-log').onclick = () => {
+            navigator.clipboard.writeText(document.getElementById('console-content').innerText);
+        };
+
+        console.log("Start: Import Map geladen. Init Three.js...");
+
+        // --- DEIN GEFIXTER CODE (Modern) ---
+        const rgbToLab = (r, g, b) => {
+            const pivot = (n) => (n > 0.04045 ? Math.pow((n + 0.055) / 1.055, 2.4) : n / 12.92);
+            
+            const rL = pivot(r);
+            const gL = pivot(g);
+            const bL = pivot(b);
+
+            const x = (rL * 0.4124 + gL * 0.3576 + bL * 0.1805) / 0.95047;
+            const y = (rL * 0.2126 + gL * 0.7152 + bL * 0.0722) / 1.00000;
+            const z = (rL * 0.0193 + gL * 0.1192 + bL * 0.9505) / 1.08883;
+            
+            const pivotXYZ = (n) => (n > 0.008856 ? Math.cbrt(n) : (903.3 * n + 16) / 116);
+            
+            const fx = pivotXYZ(x);
+            const fy = pivotXYZ(y);
+            const fz = pivotXYZ(z);
+            
+            const L = 116 * fy - 16;
+            const a = 500 * (fx - fy);
+            // HIER IST DEIN FIX: v statt b
+            const v = 200 * (fy - fz); 
+            const C = Math.hypot(a, v);
+            
+            return { L, a, b: v, C };
+        };
+
+        const getWeightedDistance = (lab1, lab2, satWeight) => {
+            const dL = lab1.L - lab2.L;
+            const da = lab1.a - lab2.a;
+            const db = lab1.b - lab2.b;
+            const dC = lab1.C - lab2.C;
+
+            let dH_sq = (da*da + db*db) - (dC*dC);
+            if (dH_sq < 0) dH_sq = 0;
+
+            const weighted_dC = dC * satWeight;
+            return Math.sqrt((dL * dL) + (weighted_dC * weighted_dC) + dH_sq);
+        };
+
+        // --- DATA ---
+        const cssColors = {"aliceblue":"#f0f8ff","antiquewhite":"#faebd7","aqua":"#00ffff","aquamarine":"#7fffd4","azure":"#f0ffff","beige":"#f5f5dc","bisque":"#ffe4c4","black":"#000000","blanchedalmond":"#ffebcd","blue":"#0000ff","blueviolet":"#8a2be2","brown":"#a52a2a","burlywood":"#deb887","cadetblue":"#5f9ea0","chartreuse":"#7fff00","chocolate":"#d2691e","coral":"#ff7f50","cornflowerblue":"#6495ed","cornsilk":"#fff8dc","crimson":"#dc143c","cyan":"#00ffff","darkblue":"#00008b","darkcyan":"#008b8b","darkgoldenrod":"#b8860b","darkgray":"#a9a9a9","darkgreen":"#006400","darkgrey":"#a9a9a9","darkkhaki":"#bdb76b","darkmagenta":"#8b008b","darkolivegreen":"#556b2f","darkorange":"#ff8c00","darkorchid":"#9932cc","darkred":"#8b0000","darksalmon":"#e9967a","darkseagreen":"#8fbc8f","darkslateblue":"#483d8b","darkslategray":"#2f4f4f","darkslategrey":"#2f4f4f","darkturquoise":"#00ced1","darkviolet":"#9400d3","deeppink":"#ff1493","deepskyblue":"#00bfff","dimgray":"#696969","dimgrey":"#696969","dodgerblue":"#1e90ff","firebrick":"#b22222","floralwhite":"#fffaf0","forestgreen":"#228b22","fuchsia":"#ff00ff","gainsboro":"#dcdcdc","ghostwhite":"#f8f8ff","gold":"#ffd700","goldenrod":"#daa520","gray":"#808080","green":"#008000","greenyellow":"#adff2f","grey":"#808080","honeydew":"#f0fff0","hotpink":"#ff69b4","indianred":"#cd5c5c","indigo":"#4b0082","ivory":"#fffff0","khaki":"#f0e68c","lavender":"#e6e6fa","lavenderblush":"#fff0f5","lawngreen":"#7cfc00","lemonchiffon":"#fffacd","lightblue":"#add8e6","lightcoral":"#f08080","lightcyan":"#e0ffff","lightgoldenrodyellow":"#fafad2","lightgray":"#d3d3d3","lightgreen":"#90ee90","lightgrey":"#d3d3d3","lightpink":"#ffb6c1","lightsalmon":"#ffa07a","lightseagreen":"#20b2aa","lightskyblue":"#87cefa","lightslategray":"#778899","lightslategrey":"#778899","lightsteelblue":"#b0c4de","lightyellow":"#ffffe0","lime":"#00ff00","limegreen":"#32cd32","linen":"#faf0e6","magenta":"#ff00ff","maroon":"#800000","mediumaquamarine":"#66cdaa","mediumblue":"#0000cd","mediumorchid":"#ba55d3","mediumpurple":"#9370db","mediumseagreen":"#3cb371","mediumslateblue":"#7b68ee","mediumspringgreen":"#00fa9a","mediumturquoise":"#48d1cc","mediumvioletred":"#c71585","midnightblue":"#191970","mintcream":"#f5fffa","mistyrose":"#ffe4e1","moccasin":"#ffe4b5","navajowhite":"#ffdead","navy":"#000080","oldlace":"#fdf5e6","olive":"#808000","olivedrab":"#6b8e23","orange":"#ffa500","orangered":"#ff4500","orchid":"#da70d6","palegoldenrod":"#eee8aa","palegreen":"#98fb98","paleturquoise":"#afeeee","palevioletred":"#db7093","papayawhip":"#ffefd5","peachpuff":"#ffdab9","peru":"#cd853f","pink":"#ffc0cb","plum":"#dda0dd","powderblue":"#b0e0e6","purple":"#800080","rebeccapurple":"#663399","red":"#ff0000","rosybrown":"#bc8f8f","royalblue":"#4169e1","saddlebrown":"#8b4513","salmon":"#fa8072","sandybrown":"#f4a460","seagreen":"#2e8b57","seashell":"#fff5ee","sienna":"#a0522d","silver":"#c0c0c0","skyblue":"#87ceeb","slateblue":"#6a5acd","slategray":"#708090","slategrey":"#708090","snow":"#fffafa","springgreen":"#00ff7f","steelblue":"#4682b4","tan":"#d2b48c","teal":"#008080","thistle":"#d8bfd8","tomato":"#ff6347","turquoise":"#40e0d0","violet":"#ee82ee","wheat":"#f5deb3","white":"#ffffff","whitesmoke":"#f5f5f5","yellow":"#ffff00","yellowgreen":"#9acd32"};
+
+        // --- THREE JS SCENE ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.001); 
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 3000);
+        camera.position.set(0, 300, 700);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dl = new THREE.DirectionalLight(0xffffff, 1.5); dl.position.set(100,300,100); scene.add(dl);
+
+        // --- SPHERES ---
+        const spheres = [];
+        const geo = new THREE.SphereGeometry(10, 32, 32);
+        
+        const targetMarker = new THREE.Mesh(new THREE.SphereGeometry(16,32,32), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.3, wireframe:true}));
+        targetMarker.visible = false; scene.add(targetMarker);
+        
+        const analyzeColor = (hex, name) => {
+            const c = new THREE.Color(hex);
+            const hsl = {}; c.getHSL(hsl);
+            const { h, s, l } = hsl;
+            const lab = rgbToLab(c.r, c.g, c.b);
+            let fam = "Andere";
+            const deg = h * 360; 
+            if (s < 0.12 || l < 0.1 || l > 0.96) fam = "Grau/Weiß";
+            else if (deg >= 340 || deg < 15) fam = "Rot";
+            else if (deg >= 15 && deg < 45) fam = "Orange";
+            else if (deg >= 45 && deg < 70) fam = "Gelb";
+            else if (deg >= 70 && deg < 160) fam = "Grün";
+            else if (deg >= 160 && deg < 200) fam = "Cyan";
+            else if (deg >= 200 && deg < 260) fam = "Blau";
+            else if (deg >= 260 && deg < 300) fam = "Lila";
+            else if (deg >= 300 && deg < 340) fam = "Pink";
+            const intensity = s * 0.6 + (1 - Math.abs(l - 0.5)) * 0.4;
+            return { hex, name, r:c.r, g:c.g, b:c.b, h, s, l, lab, fam, c, intensity };
+        };
+
+        Object.keys(cssColors).forEach(k => {
+            const d = analyzeColor(cssColors[k], k);
+            const m = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({color:d.c, roughness:0.2, metalness:0.1, clearcoat:0.6}));
+            m.userData = { ...d, targetPos: new THREE.Vector3(), targetScale: 1.0 };
+            m.position.set((Math.random()-0.5)*500, (Math.random()-0.5)*500, (Math.random()-0.5)*500);
+            scene.add(m); spheres.push(m);
+        });
+
+        // --- LOGIC ---
+        const state = { mode: 'family', targetHex: '#ff4081', tol: 25, sat: 1.0 };
+
+        const applyTarget = () => {
+            const tc = new THREE.Color(state.targetHex);
+            const tLab = rgbToLab(tc.r, tc.g, tc.b);
+            targetMarker.visible = true; targetMarker.material.color.set(tc); targetMarker.position.set(0,0,0);
+            
+            spheres.forEach(m => m.userData.dist = getWeightedDistance(tLab, m.userData.lab, state.sat));
+            const sorted = [...spheres].sort((a,b) => a.userData.dist - b.userData.dist);
+            
+            sorted.forEach((m, i) => {
+                if(i < state.tol) {
+                    const r = Math.sqrt(i)*22 + 25; const t = Math.random()*Math.PI*2; const p = Math.acos(2*Math.random()-1);
+                    m.userData.targetPos.setFromSphericalCoords(r, p, t);
+                    m.userData.targetScale = (i<5)?1.3:1.0;
+                } else {
+                    m.userData.targetPos.setFromSphericalCoords(800, Math.random()*3, Math.random()*3);
+                    m.userData.targetScale = 0.0;
+                }
+            });
+            controls.autoRotateSpeed = 0.5;
+            console.log(`Cluster erstellt für ${state.targetHex} (Tol: ${state.tol}, Sat: ${state.sat}x)`);
+        };
+
+        const clusterFam = () => {
+            targetMarker.visible = false;
+            const f = {}; spheres.forEach(m => { m.userData.targetScale = 1; (f[m.userData.fam] ??= []).push(m); });
+            const keys = Object.keys(f);
+            keys.forEach((fam, i) => {
+                const a = (i/keys.length)*Math.PI*2; const cx = Math.cos(a)*350; const cz = Math.sin(a)*350;
+                f[fam].sort((x,y) => y.userData.intensity - x.userData.intensity).forEach((m, k) => {
+                    const r = Math.sqrt(k)*22; const t = Math.random()*6.28; const p = Math.acos(2*Math.random()-1);
+                    m.userData.targetPos.set(cx + r*Math.sin(p)*Math.cos(t), (m.userData.l-0.5)*100 + r*Math.sin(p)*Math.sin(t), cz + r*Math.cos(p));
+                });
+            });
+            console.log("Modus: Familien");
+        };
+
+        const clusterSim = () => {
+            targetMarker.visible = false;
+            [...spheres].sort((a,b) => a.userData.h - b.userData.h).forEach((m, i, arr) => {
+                m.userData.targetScale = 1;
+                const t = i/arr.length; const a = t*Math.PI*12; const r = 200; const h = (t-0.5)*900;
+                m.userData.targetPos.set(Math.cos(a)*r, h, Math.sin(a)*r);
+            });
+            console.log("Modus: Ähnlichkeit");
+        };
+
+        const clusterHSL = () => {
+            targetMarker.visible = false;
+            spheres.forEach(m => {
+                m.userData.targetScale = 1;
+                const a = m.userData.h * 6.28; const r = m.userData.s * 300; const y = (m.userData.l - 0.5) * 500;
+                m.userData.targetPos.set(Math.cos(a)*r, y, Math.sin(a)*r);
+            });
+            console.log("Modus: HSL");
+        };
+
+        // --- UI BINDINGS ---
+        const el = {
+            pk: document.getElementById('color-picker'),
+            bc: document.getElementById('btn-custom'),
+            ts: document.getElementById('tolerance-slider'),
+            ss: document.getElementById('saturation-slider'),
+            lt: document.getElementById('tol-val'),
+            ls: document.getElementById('sat-val'),
+            sg: document.getElementById('slider-group'),
+            btns: document.querySelectorAll('#ui button:not(#btn-custom)')
+        };
+
+        const setMode = (id) => {
+            el.btns.forEach(b => b.classList.remove('active'));
+            if(id) { document.getElementById(id).classList.add('active'); el.sg.classList.remove('active'); state.mode = id; }
+            else { el.bc.classList.add('active'); el.sg.classList.add('active'); state.mode = 'custom'; }
+        };
+
+        document.getElementById('btn-family').onclick = () => { clusterFam(); setMode('btn-family'); };
+        document.getElementById('btn-sim').onclick = () => { clusterSim(); setMode('btn-sim'); };
+        document.getElementById('btn-hsl').onclick = () => { clusterHSL(); setMode('btn-hsl'); };
+        
+        const upd = () => {
+            state.targetHex = el.pk.value; state.tol = parseInt(el.ts.value); state.sat = parseFloat(el.ss.value);
+            el.lt.innerText = state.tol>=148?"Alle":state.tol; el.ls.innerText = state.sat.toFixed(1)+"x";
+            setMode(null); applyTarget();
+        };
+
+        el.bc.onclick = upd; el.pk.onchange = upd;
+        el.ts.oninput = () => { state.tol = parseInt(el.ts.value); el.lt.innerText = state.tol>=148?"Alle":state.tol; if(state.mode==='custom') applyTarget(); };
+        el.ss.oninput = () => { state.sat = parseFloat(el.ss.value); el.ls.innerText = state.sat.toFixed(1)+"x"; if(state.mode==='custom') applyTarget(); };
+
+        // --- INTERACT ---
+        const ray = new THREE.Raycaster(); const ptr = new THREE.Vector2(); const tt = document.getElementById('tooltip');
+        const handlePtr = (x,y) => {
+            ptr.x = (x/window.innerWidth)*2-1; ptr.y = -(y/window.innerHeight)*2+1;
+            ray.setFromCamera(ptr, camera);
+            const hits = ray.intersectObjects(spheres.filter(s=>s.scale.x>0.1));
+            if(hits.length) {
+                const d = hits[0].object.userData;
+                tt.innerHTML = `<strong><span class="color-dot" style="background:${d.hex}"></span>${d.name}</strong><br><small>${d.hex}<br>Dist: ${d.dist?.toFixed(1)||'-'}</small>`;
+                let tx=x; let ty=y-20; if(tx>window.innerWidth-150) tx-=150;
+                tt.style.left=tx+'px'; tt.style.top=ty+'px'; tt.classList.add('visible'); controls.autoRotate=false;
+            } else { tt.classList.remove('visible'); controls.autoRotate=true; }
+        };
+        window.onpointerdown = e => { if(!e.target.closest('#ui,#console-overlay')) handlePtr(e.clientX, e.clientY); };
+        window.onmousemove = e => { if(window.matchMedia("(pointer: fine)").matches) handlePtr(e.clientX, e.clientY); };
+        window.onresize = () => { camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); };
+
+        clusterFam();
+        const loop = () => {
+            requestAnimationFrame(loop); controls.update();
+            if(targetMarker.visible) targetMarker.rotation.y += 0.005;
+            for(const m of spheres) {
+                m.position.lerp(m.userData.targetPos, 0.05);
+                const s = m.userData.targetScale;
+                m.scale.setScalar(THREE.MathUtils.lerp(m.scale.x, s, 0.1));
+            }
+            renderer.render(scene, camera);
+        };
+        loop();
+        console.log("Willkommen in der Zukunft! 🚀");
+    </script>
+</body>
+</html>
