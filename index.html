@@ -354,6 +354,17 @@
             background-size: 34px 100%, 55px 100%, 100% 100%;
         }
 
+        .preview.steffen {
+            background: #e9e7e1;
+        }
+
+        .preview.steffen::before {
+            background-image: url("./steffen-fischer/assets/images/der-sogenannte-suendenfall-nach-jacob-jordaens-150x200cm.jpg");
+            background-position: center;
+            background-size: cover;
+            filter: saturate(0.94);
+        }
+
         .preview::after {
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 6px;
@@ -567,6 +578,15 @@
                             <p>Generative chords, delay textures, and a monochrome GPU visualizer.</p>
                         </div>
                         <span class="tag">WebAudio</span>
+                    </a>
+
+                    <a class="lab" href="./steffen-fischer/">
+                        <span class="preview steffen" aria-hidden="true"></span>
+                        <div>
+                            <h2>Steffen Fischer</h2>
+                            <p>Temporary portfolio sketch with selected works and a lightweight gallery.</p>
+                        </div>
+                        <span class="tag">HTML</span>
                     </a>
                 </section>
             </main>
